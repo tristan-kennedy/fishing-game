@@ -23,16 +23,31 @@ public class PlayerController : MonoBehaviour
         movePlayer();
     }
 
-    public void movePlayer() 
+    public void movePlayer()
     {
-        var matrix = Matrix4x4.Rotate(Quaternion.Euler(0, 45, 0));
-        var movement = matrix.MultiplyPoint3x4(new Vector3(move.x, 0f, move.y));
-
-        if (movement != Vector3.zero)
+        if (move != Vector2.zero)
         {
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(movement), 0.15f);
-        }
+            // Get the camera's forward and right directions
+            Vector3 cameraForward = Camera.main.transform.forward;
+            Vector3 cameraRight = Camera.main.transform.right;
 
-        transform.Translate(movement * speed * Time.deltaTime, Space.World);
+            // Flatten the directions to the XZ plane
+            cameraForward.y = 0;
+            cameraRight.y = 0;
+
+            // Normalize them to avoid scaling issues
+            cameraForward.Normalize();
+            cameraRight.Normalize();
+
+            // Calculate the movement direction relative to the camera
+            Vector3 movement = (cameraForward * move.y + cameraRight * move.x).normalized;
+
+            // Rotate the player to face the movement direction
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(movement), 0.15f);
+
+            // Move the player
+            transform.Translate(movement * speed * Time.deltaTime, Space.World);
+        }
     }
+
 }
