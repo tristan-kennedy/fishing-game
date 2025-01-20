@@ -1,74 +1,73 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class PlayerFishing : MonoBehaviour
 {
-    public LayerMask waterLayer;
+    public LayerMask waterLayer; // Set this to the water layer in the Inspector
+    public GameObject cursorPrefab; // Assign a prefab for the cursor (e.g., a circle or target marker)
+    private GameObject cursorInstance;
     private bool isFishing = false;
     private const float WAIT_TIME = 3f;
 
-    // Debug variables
-    public bool showDebugLines = true;
-    public float debugLineLength = 100f;
+    private Vector2 cursorPosition; // Input from Unity's new Input System
 
-    void OnDrawGizmos()
+    public void OnLook(InputAction.CallbackContext context)
     {
-        if (showDebugLines && Camera.main != null)
+        cursorPosition = context.ReadValue<Vector2>();
+    }
+
+    void Start()
+    {
+        // Instantiate the cursor at the start but disable it initially
+        if (cursorPrefab != null)
         {
-            // Draw the ray in the scene view
-            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            Gizmos.color = Color.red;
-            Gizmos.DrawLine(ray.origin, ray.origin + ray.direction * debugLineLength);
+            cursorInstance = Instantiate(cursorPrefab);
+            cursorInstance.SetActive(false);
         }
     }
 
     void Update()
     {
-        if (Input.GetMouseButtonDown(0) && !isFishing)
+        if (Camera.main == null || isFishing) return;
+
+        // Handle casting the fishing line on left mouse button press
+        if (Mouse.current.leftButton.wasPressedThisFrame)
         {
             CastLine();
         }
+
+        // Update the cursor position
+        UpdateCursor();
     }
 
     void CastLine()
     {
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
-
-        // Debug info
-        Debug.Log($"Ray Origin: {ray.origin}, Direction: {ray.direction}");
-        Debug.Log($"Water Layer Mask Value: {waterLayer.value}");
-
-        if (Physics.Raycast(ray, out hit, Mathf.Infinity, waterLayer))
+        Ray ray = Camera.main.ScreenPointToRay(cursorPosition);
+        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity))
         {
-            Debug.Log($"Hit something at distance: {hit.distance} on layer: {LayerMask.LayerToName(hit.collider.gameObject.layer)}");
+            if((waterLayer & 1 << hit.collider.gameObject.layer) == 0)
+            {
+                Debug.Log("The cast did not hit any water.");
+                return;
+            }
             FishingArea area = hit.collider.GetComponent<FishingArea>();
             if (area != null)
             {
                 StartCoroutine(FishingRoutine(area));
             }
-            else
-            {
-                Debug.Log("No fishing area component found on water!");
-            }
         }
         else
         {
-            // Additional debug info
-            Debug.DrawRay(ray.origin, ray.direction * 100f, Color.red, 2f);
-            Debug.Log("Didn't hit water! Check the following:");
-            Debug.Log("1. Is the water object on the correct layer?");
-            Debug.Log($"2. Current water layer mask: {waterLayer.value}");
-            Debug.Log("3. Does the water have a collider?");
-            Debug.Log("4. Is the collider enabled?");
+            Debug.Log("The cast did not hit any water.");
         }
     }
 
     IEnumerator FishingRoutine(FishingArea area)
     {
         isFishing = true;
-        Debug.Log("Started fishing...");
 
+        Debug.Log("Fishing...");
         yield return new WaitForSeconds(WAIT_TIME);
 
         Fish fish = area.GetRandomFish();
@@ -78,9 +77,25 @@ public class PlayerFishing : MonoBehaviour
         }
         else
         {
-            Debug.Log("No fish in this area!");
+            Debug.Log("No fish were caught.");
         }
 
         isFishing = false;
+    }
+
+    void UpdateCursor()
+    {
+        if (cursorInstance == null || Camera.main == null) return;
+
+        Ray ray = Camera.main.ScreenPointToRay(cursorPosition);
+        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, waterLayer))
+        {
+            cursorInstance.transform.position = hit.point;
+            cursorInstance.SetActive(true);
+        }
+        else
+        {
+            cursorInstance.SetActive(false);
+        }
     }
 }

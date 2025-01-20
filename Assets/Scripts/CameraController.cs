@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using DG.Tweening;
+
 public class CameraManager : MonoBehaviour
 {
     #region Variables
@@ -8,12 +9,12 @@ public class CameraManager : MonoBehaviour
     private Vector2 _delta;
 
     private bool _isRotating;
-    private bool _isBusy;
 
     private float _xRotation;
 
-    [SerializeField] private float movementSpeed = 10.0f;
     [SerializeField] private float rotationSpeed = 0.5f;
+
+    private Tween _snapTween;
 
     #endregion
 
@@ -29,13 +30,18 @@ public class CameraManager : MonoBehaviour
 
     public void OnRotate(InputAction.CallbackContext context)
     {
-        if (_isBusy) return;
+        if (context.started || context.performed)
+        {
+            _isRotating = true;
 
-        _isRotating = context.started || context.performed;
+            // If snapping is in progress, stop it immediately
+            _snapTween?.Kill();
+        }
 
         if (context.canceled)
         {
-            _isBusy = true;
+            _isRotating = false;
+
             SnapRotation();
         }
     }
@@ -51,24 +57,24 @@ public class CameraManager : MonoBehaviour
 
     private void SnapRotation()
     {
-        transform.DORotate(SnappedVector(), 0.5f)
-            .SetEase(Ease.OutBounce)
+        _snapTween = transform.DORotate(SnappedVector(), 0.5f)
+            .SetEase(Ease.OutSine)
             .OnComplete(() =>
             {
-                _isBusy = false;
+                _snapTween = null; // Clear the reference when snapping completes
             });
     }
 
     private Vector3 SnappedVector()
     {
         var endValue = 0.0f;
-        var currentY = Mathf.Ceil(transform.rotation.eulerAngles.y);
+        var currentY = Mathf.Round(transform.rotation.eulerAngles.y);
 
         endValue = currentY switch
         {
-            >= 0 and <= 90 => 45.0f,
-            >= 91 and <= 180 => 135.0f,
-            >= 181 and <= 270 => 225.0f,
+            >= 0 and < 90 => 45.0f,
+            >= 90 and < 180 => 135.0f,
+            >= 180 and < 270 => 225.0f,
             _ => 315.0f
         };
 
