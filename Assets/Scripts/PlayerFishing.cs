@@ -1,44 +1,45 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System;
 
 public class PlayerFishing : MonoBehaviour
 {
-    private float CLICK_WINDOW = 1.5f; // Time the player has to click
-    private const float WAIT_TIME = 3f;
-    public LayerMask waterLayer; // Set this to the water layer in the Inspector
-    public GameObject cursorPrefab; // Assign a prefab for the cursor (e.g., a circle or target marker)
+    private const float BITE_WINDOW = 1.5f;
+    private const float MIN_FISH_TIME = 2f;
+    private const float MAX_FISH_TIME = 5f;
+
+    [Header("References")]
+    [SerializeField] private LayerMask waterLayer;
+    [SerializeField] private GameObject cursorPrefab;
+    [SerializeField] private GameObject exclamationPrefab;
+    [SerializeField] private PlayerController playerController;
+
     private GameObject cursorInstance;
-    public GameObject exclamationPrefab; // Assign a prefab for the exclamation mark
     private GameObject exclamationInstance;
-    private bool fishOnLine = false;
+    private Vector2 cursorPosition;
+    private FishingState currentState = FishingState.Idle;
     private FishingArea currentFishingArea;
-    private Coroutine fishingRoutine;
+    private float stateTimer;
+    private float nextFishTime;
 
-    private Vector2 cursorPosition; // Input from Unity's new Input System
+    [Header("Minigame")]
+    [SerializeField] private FishingMinigame minigamePrefab;
+    private FishingMinigame activeMinigame;
 
-    public void OnLook(InputAction.CallbackContext context)
+    private enum FishingState
     {
-        cursorPosition = context.ReadValue<Vector2>();
+        Idle,
+        Fishing,
+        FishBiting,
+        Reeling
     }
 
-    public void OnClick(InputAction.CallbackContext context)
+    private void Start()
     {
-        if (context.performed)
-        {
-            if (currentFishingArea != null)
-            {
-                HandleStopFishing();
-                return;
-            }
-            else
-            {
-                CastLine();
-            }
-        }
+        InitializeObjects();
     }
 
-    void Start()
+    private void InitializeObjects()
     {
         if (cursorPrefab != null)
         {
@@ -53,105 +54,145 @@ public class PlayerFishing : MonoBehaviour
         }
     }
 
-
-    void Update()
+    private void Update()
     {
-        if (Camera.main == null || currentFishingArea is not null) return;
-
-        UpdateCursor();
+        UpdateCursorVisibility();
+        UpdateFishingState();
     }
 
-    void CastLine()
+    public void OnLook(InputAction.CallbackContext context)
+    {
+        cursorPosition = context.ReadValue<Vector2>();
+    }
+
+    public void OnClick(InputAction.CallbackContext context)
+    {
+        if (!context.performed) return;
+
+        switch (currentState)
+        {
+            case FishingState.Idle:
+                TryCastLine();
+                break;
+            case FishingState.Fishing:
+                StopFishing();
+                break;
+            case FishingState.FishBiting:
+                CatchFish();
+                break;
+        }
+    }
+
+    private void UpdateFishingState()
+    {
+        stateTimer += Time.deltaTime;
+
+        switch (currentState)
+        {
+            case FishingState.Fishing when stateTimer >= nextFishTime:
+                TriggerFishBite();
+                break;
+            case FishingState.FishBiting when stateTimer >= BITE_WINDOW:
+                FishEscaped();
+                break;
+        }
+    }
+
+    private void TryCastLine()
     {
         Ray ray = Camera.main.ScreenPointToRay(cursorPosition);
-        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity))
+        if (!Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, waterLayer))
         {
-            if((waterLayer & 1 << hit.collider.gameObject.layer) == 0)
-            {
-                Debug.Log("The cast did not hit any water.");
-                return;
-            }
-            FishingArea area = hit.collider.GetComponent<FishingArea>();
-            if (area != null)
-            {
-                currentFishingArea = area;
-                fishingRoutine = StartCoroutine(FishingRoutine());
-            }
+            Debug.Log("Cast missed the water!");
+            return;
         }
-        else
+
+        FishingArea area = hit.collider.GetComponent<FishingArea>();
+        if (area == null) return;
+
+        StartFishing(area, hit.point);
+    }
+
+    private void StartFishing(FishingArea area, Vector3 position)
+    {
+        currentFishingArea = area;
+        currentState = FishingState.Fishing;
+        playerController.canMove = false;
+        stateTimer = 0f;
+        nextFishTime = UnityEngine.Random.Range(MIN_FISH_TIME, MAX_FISH_TIME);
+
+        if (cursorInstance != null)
         {
-            Debug.Log("The cast did not hit any water.");
+            cursorInstance.transform.position = position;
+            cursorInstance.SetActive(true);
         }
     }
 
-    IEnumerator FishingRoutine()
+    private void TriggerFishBite()
     {
-        while (currentFishingArea is not null)
+        currentState = FishingState.FishBiting;
+        stateTimer = 0f;
+
+        if (exclamationInstance != null)
         {
-            Debug.Log("Fishing...");
-            yield return new WaitForSeconds(WAIT_TIME);
+            exclamationInstance.transform.position = cursorInstance.transform.position;
+            exclamationInstance.SetActive(true);
+        }
 
-            // A fish is on the line
-            fishOnLine = true;
-            if (exclamationInstance != null)
-            {
-                exclamationInstance.SetActive(true);
-                exclamationInstance.transform.position = cursorInstance.transform.position;
-            }
-
-            float elapsedTime = 0f;
-
-            while (elapsedTime < CLICK_WINDOW)
-            {
-                elapsedTime += Time.deltaTime;
-                yield return null;
-            }
-
-            if (fishOnLine)
-            {
-                Debug.Log("The fish got away!");
-            }
-
-            if (exclamationInstance != null)
-            {
-                exclamationInstance.SetActive(false);
-            }
-            fishOnLine = false;
+        // Spawn and start minigame
+        if (minigamePrefab != null)
+        {
+            activeMinigame = Instantiate(minigamePrefab);
+            activeMinigame.onSuccess += OnMinigameSuccess;
+            activeMinigame.onFail += OnMinigameFailed;
+            activeMinigame.StartMinigame();
         }
     }
-
-    void HandleStopFishing()
+    private void OnMinigameSuccess()
     {
+        CatchFish();
+        CleanupMinigame();
+    }
 
-        if (fishOnLine)
+    private void OnMinigameFailed()
+    {
+        FishEscaped();
+        CleanupMinigame();
+    }
+
+    private void CatchFish()
+    {
+        if (currentFishingArea != null)
         {
-            Fish fish = currentFishingArea.GetRandomFish();
-            Debug.Log($"Caught a {fish.fishName}!");
-        }
-        else
-        {
-            Debug.Log("No fish were caught.");
+            Fish caughtFish = currentFishingArea.GetRandomFish();
+            Debug.Log($"Caught a {caughtFish.fishName}!");
         }
 
+        StopFishing();
+    }
+
+    private void FishEscaped()
+    {
+        Debug.Log("The fish got away!");
+        StopFishing();
+    }
+
+    private void StopFishing()
+    {
+        currentState = FishingState.Idle;
         currentFishingArea = null;
-        CleanupFishing();
-    }
+        playerController.canMove = true;
 
-    void CleanupFishing()
-    {
-        StopCoroutine(fishingRoutine);
-        currentFishingArea = null;
         if (exclamationInstance != null)
         {
             exclamationInstance.SetActive(false);
         }
-        fishOnLine = false;
     }
 
-
-    void UpdateCursor()
+    private void UpdateCursorVisibility()
     {
-        if (cursorInstance == null || Camera.main == null) return;
+        if (cursorInstance == null || Camera.main == null || currentState != FishingState.Idle)
+            return;
 
         Ray ray = Camera.main.ScreenPointToRay(cursorPosition);
         if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, waterLayer))
@@ -162,6 +203,16 @@ public class PlayerFishing : MonoBehaviour
         else
         {
             cursorInstance.SetActive(false);
+        }
+    }
+    private void CleanupMinigame()
+    {
+        if (activeMinigame != null)
+        {
+            activeMinigame.OnMinigameSuccess -= OnMinigameSuccess;
+            activeMinigame.OnMinigameFailed -= OnMinigameFailed;
+            Destroy(activeMinigame.gameObject);
+            activeMinigame = null;
         }
     }
 }

@@ -5,6 +5,7 @@ public class PlayerController : MonoBehaviour
 {
     public float speed;
     private Vector2 move;
+    public bool canMove = true;
 
     public void OnMove(InputAction.CallbackContext context)
     {
@@ -20,7 +21,10 @@ public class PlayerController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        movePlayer();
+        if (canMove)
+        {
+            movePlayer();
+        }
     }
 
     public void movePlayer()
