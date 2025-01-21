@@ -22,10 +22,6 @@ public class PlayerFishing : MonoBehaviour
     private float stateTimer;
     private float nextFishTime;
 
-    [Header("Minigame")]
-    [SerializeField] private FishingMinigame minigamePrefab;
-    private FishingMinigame activeMinigame;
-
     private enum FishingState
     {
         Idle,
@@ -138,26 +134,6 @@ public class PlayerFishing : MonoBehaviour
             exclamationInstance.transform.position = cursorInstance.transform.position;
             exclamationInstance.SetActive(true);
         }
-
-        // Spawn and start minigame
-        if (minigamePrefab != null)
-        {
-            activeMinigame = Instantiate(minigamePrefab);
-            activeMinigame.onSuccess += OnMinigameSuccess;
-            activeMinigame.onFail += OnMinigameFailed;
-            activeMinigame.StartMinigame();
-        }
-    }
-    private void OnMinigameSuccess()
-    {
-        CatchFish();
-        CleanupMinigame();
-    }
-
-    private void OnMinigameFailed()
-    {
-        FishEscaped();
-        CleanupMinigame();
     }
 
     private void CatchFish()
@@ -203,16 +179,6 @@ public class PlayerFishing : MonoBehaviour
         else
         {
             cursorInstance.SetActive(false);
-        }
-    }
-    private void CleanupMinigame()
-    {
-        if (activeMinigame != null)
-        {
-            activeMinigame.OnMinigameSuccess -= OnMinigameSuccess;
-            activeMinigame.OnMinigameFailed -= OnMinigameFailed;
-            Destroy(activeMinigame.gameObject);
-            activeMinigame = null;
         }
     }
 }
