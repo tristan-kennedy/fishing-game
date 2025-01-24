@@ -19,11 +19,6 @@ public class FishingMinigame : MonoBehaviour
     float failThreshold = -100;
     float successCounter = 0;
 
-    private void Start()
-    {
-        gameObject.SetActive(false);
-    }
-
     // Update is called once per frame
     void Update()
     {
@@ -55,7 +50,6 @@ public class FishingMinigame : MonoBehaviour
 
         if(successCounter >= successThreshold)
         {
-            Debug.Log("TEST");
             onFishCaught.Invoke();
 
             successCounter = 0;
