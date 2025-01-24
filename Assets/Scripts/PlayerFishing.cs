@@ -22,16 +22,21 @@ public class PlayerFishing : MonoBehaviour
     private float stateTimer;
     private float nextFishTime;
 
+    public FishingMinigame minigame;
+
     private enum FishingState
     {
         Idle,
         Fishing,
         FishBiting,
+        FishingMinigame,
         Reeling
     }
 
     private void Start()
     {
+        minigame.onFishCaught.AddListener(() => EndMinigame(true));
+        minigame.onFishLost.AddListener(() => EndMinigame(false));
         InitializeObjects();
     }
 
@@ -74,7 +79,7 @@ public class PlayerFishing : MonoBehaviour
                 StopFishing();
                 break;
             case FishingState.FishBiting:
-                CatchFish();
+                StartMinigame();
                 break;
         }
     }
@@ -140,8 +145,8 @@ public class PlayerFishing : MonoBehaviour
     {
         if (currentFishingArea != null)
         {
-            Fish caughtFish = currentFishingArea.GetRandomFish();
-            Debug.Log($"Caught a {caughtFish.fishName}!");
+            Fish currentFish = currentFishingArea.GetRandomFish();
+            Debug.Log($"Caught a {currentFish.fishName}!");
         }
 
         StopFishing();
@@ -179,6 +184,26 @@ public class PlayerFishing : MonoBehaviour
         else
         {
             cursorInstance.SetActive(false);
+        }
+    }
+
+    private void StartMinigame()
+    {
+        currentState = FishingState.FishingMinigame;
+        minigame.gameObject.SetActive(true);
+    }
+
+    public void EndMinigame(bool success)
+    {
+        minigame.gameObject.SetActive(false);
+
+        if (success)
+        {
+            CatchFish();
+        }
+        else
+        {
+            FishEscaped();
         }
     }
 }
