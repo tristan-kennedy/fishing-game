@@ -23,6 +23,7 @@ public class PlayerFishing : MonoBehaviour
     private float nextFishTime;
 
     public FishingMinigame minigame;
+    public RenderTexture renderTexture;
 
     private enum FishingState
     {
@@ -63,7 +64,16 @@ public class PlayerFishing : MonoBehaviour
 
     public void OnLook(InputAction.CallbackContext context)
     {
-        cursorPosition = context.ReadValue<Vector2>();
+        Vector2 rawPosition = context.ReadValue<Vector2>();
+
+        // Scale the position based on render texture vs screen resolution
+        float scaleX = (float)renderTexture.width / Screen.width;
+        float scaleY = (float)renderTexture.height / Screen.height;
+
+        cursorPosition = new Vector2(
+            rawPosition.x * scaleX,
+            rawPosition.y * scaleY
+        );
     }
 
     public void OnClick(InputAction.CallbackContext context)
